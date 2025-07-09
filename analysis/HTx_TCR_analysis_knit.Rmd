@@ -1,0 +1,201 @@
+---
+title: "HTx_TCR_analysis"
+date: "2025-07-08"
+output:
+  html_document:
+    keep_md: true
+    toc: true
+    self_contained: true
+  pdf_document:
+    toc: true
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+options(width = 100)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, dev = c("png", "pdf"))
+seed <- 1234
+```
+
+## load packages
+```{r load packages, warning=FALSE, include=FALSE}
+
+library(ExploreSCdataSeurat3)
+library(runSeurat3)
+library(Seurat)
+library(ggpubr)
+library(pheatmap)
+library(SingleCellExperiment)
+library(dplyr)
+library(tidyverse)
+library(viridis)
+library(muscat)
+library(circlize)
+library(destiny)
+library(scater)
+library(metap)
+library(multtest)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(msigdbr)
+library(enrichplot)
+library(DOSE)
+library(grid)
+library(gridExtra)
+library(ggupset)
+library(VennDiagram)
+library(NCmisc)
+library(RColorBrewer)
+library(magrittr)
+library(knitr)
+library(kableExtra)
+library(scRepertoire)
+library(writexl)
+
+
+```
+
+
+## Make the paths to concatenate different files
+```{r load merged file}
+
+# Named vectors for each patient
+sample_names <- c("Pat3", "Pat5", "HTx022", "HTx021")
+
+gex_paths <- c(
+  Pat3 = "C:/R/HTx_TCR_analysis/data/GEX/389331_1-2_GEX_20250603_Hu_nuseq_VDJ_V3_exp_pat3_seurat.rds",
+  Pat5 = "C:/R/HTx_TCR_analysis/data/GEX/389331_2-3_GEX_20250603_Hu_nuseq_VDJ_V3_exp_pat5_seurat.rds",
+  HTx022 = "C:/R/HTx_TCR_analysis/data/GEX/389331_3-4_GEX_20250610_Hu_nuseq_VDJ_V3_HTx_022_V2_seurat.rds",
+  HTx021 = "C:/R/HTx_TCR_analysis/data/GEX/389331_4-5_GEX_20250610_Hu_nuseq_VDJ_V3_HTx_021_V3_seurat.rds"
+)
+
+vdj_paths <- c(
+  Pat3 = "C:/R/HTx_TCR_analysis/data/389331_5-2_TCR_20250603_Hu_nuseq_VDJ_V3_exp_pat3_cellRangerVDJ/outs/filtered_contig_annotations.csv",
+  Pat5 = "C:/R/HTx_TCR_analysis/data/389331_6-3_TCR_20250603_Hu_nuseq_VDJ_V3_exp_pat5_cellRangerVDJ/outs/filtered_contig_annotations.csv",
+  HTx022 = "C:/R/HTx_TCR_analysis/data/389331_7-4_TCR_20250610_Hu_nuseq_VDJ_V3_HTx_022_V2_cellRangerVDJ/outs/filtered_contig_annotations.csv",
+  HTx021 = "C:/R/HTx_TCR_analysis/data/389331_8-5_TCR_20250610_Hu_nuseq_VDJ_V3_HTx_021_V3_cellRangerVDJ/outs/filtered_contig_annotations.csv"
+)
+
+
+```
+
+
+
+## Make the list and load GEX seurat objects -> merge TCR sequences
+```{r}
+
+seurat_list <- list()
+
+for (sample in sample_names) {
+  # Load GEX Seurat object
+  seurat_obj <- readRDS(gex_paths[sample])
+  
+  # Clean Seurat barcodes
+  barcodes <- colnames(seurat_obj)
+  true_barcodes <- sapply(strsplit(barcodes, "\\."), function(x) tail(x, 1))
+  colnames(seurat_obj) <- true_barcodes
+  
+  # Load TCR data
+  vdj <- read.csv(vdj_paths[sample])
+  
+  # Combine into scRepertoire object
+  combined_tcr <- combineTCR(list(vdj), samples = sample, ID = "TCR")
+  
+  # Clean TCR barcodes
+  combined_tcr[[1]]$barcode <- sub(".*_(TCR|NA)_", "", combined_tcr[[1]]$barcode)
+  
+  # Merge into Seurat
+  seurat_obj <- combineExpression(combined_tcr, seurat_obj, cloneCall = "gene")
+  
+  # Add sample ID
+  seurat_obj$sample_id <- sample
+  
+  # Save to list
+  seurat_list[[sample]] <- seurat_obj
+}
+
+
+```
+
+
+## Merge the seurat list
+```{r}
+
+seurat_merged <- merge(seurat_list[[1]], y = seurat_list[-1], add.cell.ids = sample_names, project = "MultiTCR")
+
+seurat_merged <- JoinLayers(seurat_merged)
+
+```
+
+
+```{r}
+
+#rerun seurat
+seuratMfil <- NormalizeData (object = seurat_merged)
+seuratMfil <- FindVariableFeatures(object = seuratMfil, selection.method = "vst", nfeatures = 3000)
+seuratMfil <- ScaleData(object = seuratMfil, verbose = TRUE)
+seuratMfil <- RunPCA(object=seuratMfil, npcs = 20, verbose = FALSE)
+seuratMfil <- RunTSNE(object=seuratMfil, reduction="pca", dims = 1:20, check_duplicates = FALSE)
+seuratMfil <- RunUMAP(object=seuratMfil, reduction="pca", dims = 1:20)
+seuratMfil <- FindNeighbors(object = seuratMfil, reduction = "pca", dims= 1:20)
+
+res <- c(0.25, 0.6, 0.8, 0.4, 0.1,0.15)
+for (i in 1:length(res)) {
+  seuratMfil <- FindClusters(object = seuratMfil, resolution = res[i], random.seed = 1234)
+}
+
+
+```
+
+## Check UMAP and gene expression
+```{r}
+
+Idents(seuratMfil) <- seuratMfil$RNA_snn_res.0.1
+DimPlot(seuratMfil, reduction = "umap", pt.size = 0.2,  raster = FALSE) 
+
+FeaturePlot(seuratMfil, features = "ENSG00000168685.IL7R", pt.size = 1, cols = c("lightgrey", "#BE3144"))
+FeaturePlot(seuratMfil, features = "ENSG00000198851.CD3E", pt.size = 1, cols = c("lightgrey", "#BE3144"))
+
+
+```
+
+## Trim the data - only cells with TCR
+```{r}
+
+## Keep only cells with TCR
+seuratMfil_2 <- subset(seuratMfil, subset = !is.na(CTgene))
+
+DimPlot(seuratMfil_2, group.by = "CTgene", order=TRUE)
+FeaturePlot(seuratMfil_2, features = c("ENSG00000010610.CD4", "ENSG00000153563.CD8A","ENSG00000198851.CD3E"))
+
+
+## Expression of CD3E/CD4/CD8 in cells with TCR
+
+combined_df <- cbind(
+  FetchData(seuratMfil_2, vars = c("ENSG00000198851.CD3E","ENSG00000010610.CD4", "ENSG00000153563.CD8A")),
+  seuratMfil_2@meta.data[, c("CTgene", "CTaa")]
+)
+
+
+combined_df$Tcell_type <- with(combined_df, ifelse(ENSG00000153563.CD8A > 0, "CD8+",
+                                           ifelse(ENSG00000010610.CD4 > 0, "CD4+",
+                                           ifelse(ENSG00000198851.CD3E > 0, "CD4+",
+                                                  "Unknown"))))
+
+## Clean up the dataframe 
+T_clones <- combined_df%>%
+  dplyr::select("Tcell_type", "CTaa", "CTgene")
+
+print(T_clones)
+
+```
+
+
+
+
+## session info
+```{r date and session info}
+date()
+sessionInfo()
+```
