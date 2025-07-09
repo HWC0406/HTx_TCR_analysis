@@ -166,7 +166,7 @@ FeaturePlot(seuratMfil, features = "ENSG00000198851.CD3E", pt.size = 1, cols = c
 ## Keep only cells with TCR
 seuratMfil_2 <- subset(seuratMfil, subset = !is.na(CTgene))
 
-DimPlot(seuratMfil_2, group.by = "CTgene", order=TRUE)
+DimPlot(seuratMfil_2, group.by = "CTaa", order=TRUE)
 FeaturePlot(seuratMfil_2, features = c("ENSG00000010610.CD4", "ENSG00000153563.CD8A","ENSG00000198851.CD3E"))
 
 
@@ -189,6 +189,7 @@ T_clones <- combined_df%>%
 
 print(T_clones)
 
+count(T_clones)
 ```
 
 

@@ -1,0 +1,253 @@
+---
+---
+title: "HTx_TCR_analysis"
+date: "2025-07-08"
+output:
+  html_document:
+    keep_md: true
+    toc: true
+    self_contained: true
+  pdf_document:
+    toc: true
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+options(width = 100)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, dev = c("png", "pdf"))
+seed <- 1234
+```
+## R Markdown
+
+## load packages
+```{r load packages, warning=FALSE, include=FALSE}
+
+
+library(ExploreSCdataSeurat3)
+library(runSeurat3)
+library(Seurat)
+library(ggpubr)
+library(pheatmap)
+library(SingleCellExperiment)
+library(dplyr)
+library(tidyverse)
+library(viridis)
+library(muscat)
+library(circlize)
+library(destiny)
+library(scater)
+library(metap)
+library(multtest)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(msigdbr)
+library(enrichplot)
+library(DOSE)
+library(grid)
+library(gridExtra)
+library(ggupset)
+library(VennDiagram)
+library(NCmisc)
+library(RColorBrewer)
+
+library(magrittr)
+library(knitr)
+library(kableExtra)
+library(scRepertoire)
+library(writexl)
+
+
+
+```
+
+## Make the list with TCR sequences
+```{r}
+
+Pat_3 = "C:/R/HTx_TCR_analysis/data/389331_5-2_TCR_20250603_Hu_nuseq_VDJ_V3_exp_pat3_cellRangerVDJ/outs/filtered_contig_annotations.csv"
+Pat_5 = "C:/R/HTx_TCR_analysis/data/389331_6-3_TCR_20250603_Hu_nuseq_VDJ_V3_exp_pat5_cellRangerVDJ/outs/filtered_contig_annotations.csv"
+HTX_022_V2 = "C:/R/HTx_TCR_analysis/data/389331_7-4_TCR_20250610_Hu_nuseq_VDJ_V3_HTx_022_V2_cellRangerVDJ/outs/filtered_contig_annotations.csv"
+HTX_021_V3 = "C:/R/HTx_TCR_analysis/data/389331_8-5_TCR_20250610_Hu_nuseq_VDJ_V3_HTx_021_V3_cellRangerVDJ/outs/filtered_contig_annotations.csv"
+
+list_contig <- list(
+  Pat_3 = read.csv(Pat_3),
+  Pat_5 = read.csv(Pat_5),
+  HTX_022_V2 = read.csv(HTX_022_V2),
+  HTX_021_V3 = read.csv(HTX_021_V3)
+)
+
+# Combine TCR data
+combined.TCR <- combineTCR(
+  list_contig,
+  samples = names(list_contig),
+)
+
+
+head(combined.TCR[[1]])
+
+```
+
+## Export the information of clones
+```{r export the clones as excel, warning=FALSE, include=FALSE}
+
+exportClones(combined.TCR, 
+             write.file = TRUE,
+             dir = "C:/R/2025_VDJ/",
+             file.name = "clones.csv")
+
+
+```
+
+
+## Count the percentage of unique clones
+```{r}
+
+##unique clones based on TCR-beta chain
+clonalQuant(combined.TCR, 
+            cloneCall="aa", 
+            chain = c("TRB"), 
+            scale = TRUE)
+##unique clones based on TCR-alpha chain
+clonalQuant(combined.TCR, 
+            cloneCall="aa", 
+            chain = c("TRA"), 
+            scale = TRUE)
+
+##unique clones based on paired TCR-alpha and -beta chain
+clonalQuant(combined.TCR, 
+            cloneCall="aa", 
+            chain = c("both"), 
+            scale = TRUE)
+
+
+```
+
+
+### Different analysis with sscRepertoire function {.tabset}
+#### The length of CDR3 sequences
+```{r The length of CDR3 sequences}
+##Check length distribution of the CDR3 sequences
+clonalLength(combined.TCR, 
+             cloneCall="aa", 
+             chain = "both") 
+
+```
+
+#### Check the clones between samples or conditions 
+```{r Check the clones between samples or conditions}
+##Check clones between samples and changes in dynamics (for instance - shared clones)
+##clones between samples based on TCR-beta chain
+clonalCompare(combined.TCR, 
+                  chain = "TRB", 
+                  samples = c("Pat_3", "Pat_5","HTX_022_V2","HTX_021_V3"), 
+                  cloneCall="aa", 
+                  graph = "alluvial")
+
+##clones between samples based on TCR-alpha chain
+clonalCompare(combined.TCR, 
+                  chain = "TRA", 
+                  samples = c("Pat_3", "Pat_5","HTX_022_V2","HTX_021_V3"), 
+                  cloneCall="aa", 
+                  graph = "alluvial")
+
+##clones between samples based on paired TCR-alpha and -beta chain
+clonalCompare(combined.TCR, 
+                  chain = "both", 
+                  samples = c("Pat_3", "Pat_5","HTX_022_V2","HTX_021_V3"), 
+                  cloneCall="aa", 
+                  graph = "alluvial")
+
+
+```
+
+
+
+#### Check the proportion of clones 
+```{r Check the proportion of clones }
+
+clonalHomeostasis(combined.TCR, 
+                  cloneCall = "gene")
+
+
+##clonal proportion places clones into separate bins
+clonalProportion(combined.TCR, 
+                 cloneCall = "gene",
+                 clonalSplit = c(1, 5, 10, 100, 1000, 10000)) 
+
+```
+
+
+### Different analysis with scRepertoire function in sequences {.tabset}
+#### Quantify the proportion of amino acids
+```{r Quantify the proportion of amino acids}
+
+##Quantify the proportion of amino acids along the cdr3 sequence with
+percentAA(combined.TCR, 
+          chain = "TRB", 
+          aa.length = 20)
+```
+
+
+#### Quantify the level of entropy
+```{r Quantify the level of entropy}
+##quantify the level of entropy/diversity across amino acid residues along the cdr3 sequence
+positionalEntropy(combined.TCR, 
+                  chain = "TRB", 
+                  aa.length = 20)
+
+```
+
+#### Quantify the proportion of V or J gene usage 
+```{r Quantify the proportion of V or J gene usage }
+##Quantify the proportion of V or J gene usage 
+percentGenes(combined.TCR, 
+             chain = "TRB", 
+             gene = "Vgene")
+
+```
+
+#### Quantification of the composition of the CDR3 sequence
+```{r Quantification of the composition of the CDR3 sequence}
+##Another quantification of the composition of the CDR3 sequence is to define motifs by sliding across the amino acid or nucleotide sequences at set intervals resulting in substrings or kmers.
+
+percentKmer(combined.TCR, 
+            cloneCall = "aa",
+            chain = "TRB", 
+            motif.length = 3, 
+            top.motifs = 25)
+
+```
+
+#### Diversity metrics
+```{r Diversity metrics}
+##Diversity metrics calculated, include: “shannon”, “inv.simpson”, “norm.entropy”, “gini.simpson”, “chao1”, and “ACE”.
+
+clonalDiversity(combined.TCR, 
+                metrics = c("shannon", "ACE"),
+                cloneCall = "gene", 
+                n.boots = 20)
+
+clonalRarefaction(combined.TCR,
+                  plot.type = 2,
+                  hill.numbers = 0,
+                  n.boots = 2)
+
+
+clonalOverlap(combined.TCR, 
+              cloneCall = "strict", 
+              method = "morisita")
+
+
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
