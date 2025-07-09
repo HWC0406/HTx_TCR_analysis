@@ -1,5 +1,4 @@
 ---
----
 title: "HTx_TCR_analysis"
 date: "2025-07-08"
 output:
@@ -18,7 +17,7 @@ options(width = 100)
 knitr::opts_chunk$set(warning = FALSE, message = FALSE, dev = c("png", "pdf"))
 seed <- 1234
 ```
-## R Markdown
+
 
 ## load packages
 ```{r load packages, warning=FALSE, include=FALSE}
@@ -241,13 +240,8 @@ clonalOverlap(combined.TCR,
 ```
 
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+## session info
+```{r date and session info}
+date()
+sessionInfo()
 ```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
-
